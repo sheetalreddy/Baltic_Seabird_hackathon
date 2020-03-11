@@ -97,19 +97,17 @@ def main():
     nn_budget = None
     nms_max_overlap = 1
    # deep_sort 
-    model_filename = 'model_data/mars-small128.pb'
-    encoder = gdet.create_box_encoder(model_filename,batch_size=3)
     
     metric = nn_matching.NearestNeighborDistanceMetric("euclidean", max_euclidean_distance, nn_budget)
     #metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
     tracker = Tracker(metric)
 
-    writeVideo_flag = True
+    writeVideo_flag = False
     
     #video_capture = cv2.VideoCapture('/data/Farallon3_20190706_000001_No001.avi')
     #video_capture = cv2.VideoCapture('/data/15_fps/Farallon3_20190620_021546_No001.mp4')
-    #video_capture = cv2.VideoCapture('/data/15_fps/Farallon3_20190621_090300_No004.mp4')
-    video_capture = cv2.VideoCapture('/data/rows_data/15_fps/Farallon3_20190603_155007_No001.avi')
+    video_capture = cv2.VideoCapture('/data/15_fps/Farallon3_20190621_090300_No004.mp4')
+    #video_capture = cv2.VideoCapture('/data/rows_data/15_fps/Farallon3_20190603_155007_No001.avi')
 
     video_fps = video_capture.get(cv2.CAP_PROP_FPS)
     #video_fps = 25
@@ -166,11 +164,9 @@ def main():
         detections = darknet.detect_image(netMain, metaMain, darknet_image, thresh=0.5)
 
         boxs, class_ids=convert(detections, dw, dh)
-        features = encoder(frame,boxs)
-        # features = [[] for i in range(len(boxs))]
         
         # score to 1.0 here).
-        dets = [Detection(bbox, 1.0, feature, class_id) for bbox, feature, class_id in zip(boxs, features, class_ids)]
+        dets = [Detection(bbox, 1.0, class_id) for bbox,class_id in zip(boxs, class_ids)]
         
         # Run non-maxima suppression.
         boxes = np.array([d.tlwh for d in dets])
@@ -185,13 +181,7 @@ def main():
         tracker.predict()
         tracker.update(detections_tracker, ids, time_stamp_now)
         tracker.update_events(draw_frame, time_stamp_now, wr, wr_tracklog, write )
-        if writeVideo_flag: 
-             k = tracker.terr
-             for p  in k.keys() :
-                 cv2.circle(draw_frame,(int(k[p].x),int(k[p].y)),100,(0,0,255),thickness=2,lineType=8,shift=0)
    
-            #   draw_frame = blend_transparent(draw_frame, zone)
-            #cv2.rectangle(draw_frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])),(255,255,255), 2)
         avg_area_box = 0
         for det in detections:
             name , x, y, w, h = det[0],det[2][0],det[2][1],det[2][2],det[2][3]
@@ -205,7 +195,6 @@ def main():
             cv2.rectangle(draw_frame,(int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])),get_rgb(class_id,3), 2)
         avg_area_box = avg_area_box/len(detections)
         avg_area_box_all_frames=avg_area_box 
-        ##cv2.imshow('', frame)
         
         if writeVideo_flag:
             # save a frame
@@ -214,9 +203,6 @@ def main():
         fps  = ( fps + (1./(time.time()-t1)) ) / 2
         print("fps= %f"%(fps))
         
-        # Press Q to stop!
-        #if cv2.waitKey(1) & 0xFF == ord('q'):
-        #    break
 
     video_capture.release()
     if writeVideo_flag:

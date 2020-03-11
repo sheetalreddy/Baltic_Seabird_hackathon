@@ -60,7 +60,6 @@ class Tracker:
         self.kf = kalman_filter.KalmanFilter()
         self.tracks = []
         self._next_id = 1
-        self.terr = {}
      
     def predict(self):
         """Propagate track state distributions one time step forward.
@@ -69,53 +68,9 @@ class Tracker:
         """
         for track in self.tracks:
             track.predict(self.kf)
-    '''
-    def update_terr(self):
 
-       for id,v in self.terr.items():
-          v.time_since_update += 1 
-
-       for track in self.tracks:
-           if not track.is_confirmed() or track.time_since_update > 1  or track.class_id == 0 :
-               continue
-        
-           if track.track_id in self.terr.keys(): 
-               self.terr[track.track_id].update(track.mean)
-               self.terr[track.track_id].time_since_update = 0 
-               
-           else :
-               self.terr.update({track.track_id:Territory(100, track.mean, TerrState.Empty,track.track_id)})
-      
-       # iterate thrugh the dictionary and check if IOU>0.8 then, merge the territories
-       if self.terr != {}:
-           delete = []
-           (k,t) = zip(*self.terr.items())
-           for i in range(len(t)):
-               for j in range(i+1,len(t)):
-                   a=t[i].return_point_object() 
-                   b=t[j].return_point_object()
-                   if IOU(a,b) > 0.7:
-                     if t[i].time_since_update > t[j].time_since_update:
-                        t[i].update((t[j].x,t[j].y))
-                        t[i].time_since_update = 0
-                        delete.append(k[j])
-                     else:
-                        t[j].update((t[i].x,t[i].y))
-                        t[j].time_since_update = 0
-                        delete.append(k[i]) 
-          
-           for key in delete:
-               self.terr.pop(key,None)       
-            
-
-    ''' 
     def update_events(self,draw_frame, timestamp, f,g, write):
-        pos = []
-        for i,terr in self.terr.items():
-           pos = pos + [terr.x]
-           pos = pos + [terr.y]
         for track in self.tracks:
-            takeover_per = []
             bbox = track.to_tlbr()
             cv2.rectangle(draw_frame,(int(bbox[0]), int(bbox[1])),(int(bbox[2]),int(bbox[3])),(255,255,255),2)
             if not track.is_confirmed() or track.time_since_update > 1 :
@@ -137,15 +92,9 @@ class Tracker:
                 track.events.append(Event(timestamp,EventState.Egg))
                 f.writerow([timestamp,track.class_id, track.track_id, 'Egg Layed'])
                 cv2.putText(draw_frame,"Egg laying Event detected !!!!",(text_count_x,text_count_y),4,text_count_size, (255,0,0),4)
-            for id, terr in self.terr.items(): 
-                p = area_inside( detection_polygon, terr.return_point_object())
-                if  not track.class_id :
-                   takeover_per = takeover_per + [p] 
-                   track.update_id(terr)
-                cv2.putText(draw_frame, format(p,'.2f'),(int(terr.x),int(terr.y)),0, 5e-3 * 200, (255,255,255),2)
             cv2.putText(draw_frame, str(track.track_id),(int(bbox[0]), int(bbox[1])),0, 5e-3 * 200, (255,0,0),2)
             if write:
-                g.writerow([timestamp,track.track_id,track.class_id, bbox ] + pos + takeover_per)
+                g.writerow([timestamp,track.track_id,track.class_id, bbox ])
 
     def update(self, detections, class_ids, timestamp):
 
@@ -171,18 +120,6 @@ class Tracker:
             self._initiate_track(detections[detection_idx], class_ids[detection_idx], timestamp)
         self.tracks = [t for t in self.tracks if not t.is_deleted()]
 
-        #Update distance metric.
-        '''active_targets = [t.track_id for t in self.tracks if t.is_confirmed()]
-        features, targets = [], []
-        for track in self.tracks:
-            if not track.is_confirmed():
-                continue
-            features += track.features
-            targets += [track.track_id for _ in track.features]
-            track.features = []
-        self.metric.partial_fit(
-            np.asarray(features), np.asarray(targets), active_targets)
-        '''
     def _match(self, detections):
 
         def gated_metric(tracks, dets, track_indices, detection_indices):
@@ -199,11 +136,6 @@ class Tracker:
             features = np.array([dets[i].to_xy()  for i in detection_indices])
             targets = np.array([tracks[i].to_xy() for i in track_indices])
             cost_matrix = self.metric.distance_2(features, targets)
-            print('Initial:',cost_matrix)
-            '''cost_matrix = linear_assignment.gate_cost_matrix(
-                self.kf, cost_matrix, tracks, dets, track_indices,
-                detection_indices, True)'''
-            print('gated:',cost_matrix)
             for row, track_idx in enumerate(track_indices):
                for col, det_idx in enumerate(detection_indices):
                    if (tracks[track_idx].class_id != detections[det_idx].class_id):
@@ -309,10 +241,8 @@ class Tracker:
         mean, covariance = self.kf.initiate(detection.to_xyah())
         if class_id != 0 :
             self.tracks.append(Track(
-            mean, covariance, self._next_id, class_id, timestamp, self.n_init, self.max_age_chick,
-            detection.feature))
+            mean, covariance, self._next_id, class_id, timestamp, self.n_init, self.max_age_chick))
         else:
             self.tracks.append(Track(
-            mean, covariance, self._next_id, class_id, timestamp, self.n_init, self.max_age_bird,
-            detection.feature))
+            mean, covariance, self._next_id, class_id, timestamp, self.n_init, self.max_age_bird))
         self._next_id += 1
