@@ -1,1 +1,1 @@
-# Baltic_Seabird_hackathon
+# Baltic_Seabird_project
